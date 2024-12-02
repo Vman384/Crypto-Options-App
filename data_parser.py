@@ -1,19 +1,24 @@
 import websocket
 import json
 import pandas as pd
-
+import requests
+import re
+from common import trunc
 
 class DataParser:
     def __init__(self):
         self.optionSocketEndpoint = 'wss://nbstream.binance.com/eoptions/ws'
-        self.token = "BTC@markPrice"
+        self.token = "BTC"
         self.data_rows = 15
     
     def set_token(self):
         token = input("Specify token for which you would like data: ")
-        self.token = token
+        print(f"You have chosen token: {token}")
+        self.token = token.upper()
 
     def get_live_option_data(self, id = 1):
+        if self.token[-1:-10] != "@markPrice":
+            self.token = self.token.upper() + "@markPrice"
 
         our_msg = json.dumps({'method': 'SUBSCRIBE',
                             'params': [self.token], 'id': id})
@@ -38,3 +43,11 @@ class DataParser:
         ws = websocket.WebSocketApp(self.optionSocketEndpoint, on_message=on_message, on_open=on_open)
 
         ws.run_forever()
+
+    def get_current_coin_price(self):
+        if len(self.token) == 3:
+            self.token = self.token.upper() + "USDT"
+        request = requests.get(f'https://api.binance.com/api/v3/ticker/price?symbol={self.token}')
+        coinPriceData = json.loads(request.text)
+        coinPrice = trunc(float(coinPriceData['price']), 3)
+        print (f"\nBINANCE Price for {self.token} = ${coinPrice}")

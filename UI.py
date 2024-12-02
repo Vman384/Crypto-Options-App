@@ -1,8 +1,11 @@
 import sys
+from data_parser import DataParser
+
 
 class UI:
-    def __init__(self) -> None:
+    def __init__(self, dataParser: DataParser) -> None:
         self.menu_options = {}
+        self.dataParser = dataParser
     
     def add_menu_option(self, name, function):
         """Adds a menu option with a corresponding function."""
@@ -12,6 +15,8 @@ class UI:
         """Displays the menu and prompts the user for input."""
         while True:
             print("\nMenu")
+            print("----")
+            print(f"Current token selected is: {self.dataParser.token}")
             print("----")
             for index, option in enumerate(self.menu_options.keys(), start=1):
                 print(f"{index}: {option}")
