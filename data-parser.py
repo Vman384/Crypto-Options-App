@@ -3,19 +3,23 @@ import json
 import pandas as pd
 
 
-endpoint = 'wss://nbstream.binance.com/eoptions/ws'
+class DataParser:
+    def __init__(self, token = "BTC@markPrice"):
+        self.optionEndpoint = 'wss://nbstream.binance.com/eoptions/ws'
 
-our_msg = json.dumps({'method': 'SUBSCRIBE',
-                      'params': ["BTC@markPrice"], 'id': 1})
+    def get_option_data(self, id = 1):
 
-def on_open(ws):
-    ws.send(our_msg)
+        our_msg = json.dumps({'method': 'SUBSCRIBE',
+                            'params': [self.token], 'id': id})
 
-def on_message(ws, message):
-     out = json.loads(message)
-     df = pd.DataFrame(out)
-     print(df)
+        def on_open(ws):
+            ws.send(our_msg)
 
-ws = websocket.WebSocketApp(endpoint, on_message=on_message, on_open=on_open)
+        def on_message(ws, message):
+            out = json.loads(message)
+            df = pd.DataFrame(out)
+            print(df)
 
-print(ws.run_forever())
+        ws = websocket.WebSocketApp(self.endpoint, on_message=on_message, on_open=on_open)
+
+        ws.run_forever()
