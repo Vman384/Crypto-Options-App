@@ -51,3 +51,6 @@ class DataParser:
         coinPriceData = json.loads(request.text)
         coinPrice = trunc(float(coinPriceData['price']), 3)
         print (f"\nBINANCE Price for {self.token} = ${coinPrice}")
+    
+    def get_current_holdings(self):
+        pass
