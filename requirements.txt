@@ -1,6 +1,7 @@
-websocket-client
 pandas
 requests
 scipy
 numpy
 python-binance
+asyncio
+websockets

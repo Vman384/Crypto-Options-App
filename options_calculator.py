@@ -28,7 +28,11 @@ class OptionsCalculator:
 
     
     def mispriced_options(self) -> float:
-        pass
+        self.dataParser.get_live_option_data(2,None,1)
+        symbolsDf = self.dataParser.get_data()['s']
+        print(symbolsDf)
+        options = self.dataParser.get_live_option_data(2,symbolsDf)
+        print(options)
 
     def black_scholes(self, S, K, T, r, vega, option_type='call') -> float:
         """

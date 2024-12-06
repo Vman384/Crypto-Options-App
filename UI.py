@@ -1,5 +1,7 @@
 import sys
 from data_parser import DataParser
+import asyncio
+from inspect import iscoroutinefunction
 
 
 class UI:
@@ -28,12 +30,18 @@ class UI:
                     self.quit()
                 elif 1 <= choice <= len(self.menu_options):
                     option_name = list(self.menu_options.keys())[choice - 1]
-                    self.menu_options[option_name]()
+                    selected_function = self.menu_options[option_name]
+
+                    # Check if the function is asynchronous
+                    if iscoroutinefunction(selected_function):
+                        asyncio.run(selected_function())  # Run async function
+                    else:
+                        selected_function()  # Run sync function
                 else:
                     print("Invalid choice. Please try again.")
             except ValueError:
                 print("Invalid input. Please enter a number.")
-    
+        
     def quit(self):
         """Exits the program."""
         print("Exiting...")

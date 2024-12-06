@@ -1,58 +1,90 @@
-import websocket
+import websockets
 import json
 import pandas as pd
 import requests
 import re
 from common import trunc
 from binance.client import Client
+import asyncio
 
 class DataParser:
     def __init__(self, client: Client):
         self.optionSocketEndpoint = 'wss://nbstream.binance.com/eoptions/ws'
         self.token = "BTC"
-        self.data_rows = 15
+        self.data_rows = 5
         self.client = client
+        self.data = pd.DataFrame()
     
     def set_token(self):
         token = input("Specify token for which you would like data: ")
         print(f"You have chosen token: {token}")
         self.token = token.upper()
+    
+    def get_data(self):
+        return self.data
 
-    def get_live_option_data(self, id = 1):
+    async def get_live_option_data(self, token, number_of_calls=float('inf')):
+        if not token.endswith("@markPrice"):
+            token += "@markPrice"
+
+        our_msg = json.dumps({'method': 'SUBSCRIBE', 'params': [token], 'id': 1})
+        call_count = number_of_calls
+
+        async with websockets.connect(self.optionSocketEndpoint) as ws:
+            await ws.send(our_msg)
+
+            while call_count > 0:
+                try:
+                    # Receive message
+                    message = await ws.recv()
+                    out = json.loads(message)
+
+                    # Process the data
+                    self.data = pd.DataFrame(out)
+                    call_count -= 1
+
+                except Exception as e:
+                    print(f"Error receiving data: {e}")
+                    continue
+    
+    async def display_option_data(self):
+        """Displays the fetched option data in real time."""
+        token = self.token
+        if not token.endswith("@markPrice"):
+            token += "@markPrice"
+
+        # Start fetching data in the background
+        task = asyncio.create_task(self.get_live_option_data(token))
         try:
-            if self.token[-1:-10] != "@markPrice":
-                token = self.token.upper() + "@markPrice"
+            try:
+                while True:  # Keep displaying the data as it arrives
+                    await asyncio.sleep(1)  # Delay for a moment before checking for updates
+                    if self.data is not None:
+                        df = self.data.copy()
+                        try:
+                            df.drop(columns=["e", "E"], inplace=True)  # Drop 'e' and 'E' columns
+    
+                            df_puts = df[df['s'].str.endswith('P')].reset_index(drop=True)  # Filter puts
+                            df_calls = df[df['s'].str.endswith('C')].reset_index(drop=True)  # Filter calls
 
-            our_msg = json.dumps({'method': 'SUBSCRIBE',
-                                'params': [token], 'id': id})
+                            # Display the results
+                            print("Puts:\n", df_puts.tail(self.data_rows))
+                            print("\nCalls:\n", df_calls.tail(self.data_rows))
 
-            def on_open(ws):
-                ws.send(our_msg)
-
-            def on_message(ws, message):
-                out = json.loads(message)
-                df = pd.DataFrame(out)
-                df = df.tail(self.data_rows)
-                df.drop(columns=["e"])
-                df.drop(columns=["E"])
-                df_puts = df[df['s'].str.endswith('P')].reset_index(drop=True)
-                df_calls = df[df['s'].str.endswith('C')].reset_index(drop=True)
-
-                # Display the results
-                print("Puts:\n", df_puts)
-                print("\nCalls:\n", df_calls)
+                        except:
+                            continue
 
 
-            ws = websocket.WebSocketApp(self.optionSocketEndpoint, on_message=on_message, on_open=on_open)
+            except asyncio.CancelledError:
+                print("Data display cancelled.")
+        except KeyboardInterrupt:
+            task.cancel()
 
-            ws.run_forever()
-        except Exception as e:
-            print(e)
-            print("Could not get live option data")
+
 
     def get_current_coin_price(self):
         try:
-            if len(self.token) == 3:
+            if len(self.token) <= 4:
                 token = self.token.upper() + "USDT"
             else:
                 token = self.token
