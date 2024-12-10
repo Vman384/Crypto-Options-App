@@ -46,3 +46,36 @@ class UI:
         """Exits the program."""
         print("Exiting...")
         sys.exit(0)
+    
+    async def display_option_data(self):
+        """Displays the fetched option data in real time."""
+        token = self.dataParser.token
+        if not token.endswith("@markPrice"):
+            token += "@markPrice"
+
+        # Start fetching data in the background
+        task = asyncio.create_task(self.dataParser.get_live_product_data(token))
+        try:
+            try:
+                while True:  # Keep displaying the data as it arrives
+                    await asyncio.sleep(1)  # Delay for a moment before checking for updates
+                    if self.dataParser.data is not None:
+                        df = self.dataParser.data
+                        try:
+                            df.drop(columns=["e", "E"], errors="ignore")  # Drop 'e' and 'E' columns
+    
+                            df_puts = df[df['s'].str.endswith('P')].reset_index(drop=True)  # Filter puts
+                            df_calls = df[df['s'].str.endswith('C')].reset_index(drop=True)  # Filter calls
+
+                            # Display the results
+                            print("Puts:\n", df_puts.tail(self.dataParser.data_rows))
+                            print("\nCalls:\n", df_calls.tail(self.dataParser.data_rows))
+
+                        except:
+                            continue
+
+
+            except asyncio.CancelledError:
+                print("Data display cancelled.")
+        except KeyboardInterrupt:
+            task.cancel()

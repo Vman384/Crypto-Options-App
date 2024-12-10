@@ -1,3 +1,4 @@
+import websocket
 import websockets
 import json
 import pandas as pd
@@ -6,6 +7,7 @@ import re
 from common import trunc
 from binance.client import Client
 import asyncio
+from endpoints import Endpoints
 
 class DataParser:
     def __init__(self, client: Client):
@@ -14,7 +16,7 @@ class DataParser:
         self.data_rows = 5
         self.client = client
         self.data = pd.DataFrame()
-    
+        
     def set_token(self):
         token = input("Specify token for which you would like data: ")
         print(f"You have chosen token: {token}")
@@ -23,14 +25,11 @@ class DataParser:
     def get_data(self):
         return self.data
 
-    async def get_live_option_data(self, token, number_of_calls=float('inf')):
-        if not token.endswith("@markPrice"):
-            token += "@markPrice"
-
-        our_msg = json.dumps({'method': 'SUBSCRIBE', 'params': [token], 'id': 1})
+    async def get_live_product_data(self, token, id = 1, number_of_calls=float('inf'), endpoint: Endpoints = Endpoints.OPTIONWEBSOCKET.value):
+        our_msg = json.dumps({'method': 'SUBSCRIBE', 'params': [token], 'id': id})
         call_count = number_of_calls
-
-        async with websockets.connect(self.optionSocketEndpoint) as ws:
+        endpoint += token
+        async with websockets.connect(endpoint, open_timeout=30, close_timeout=30) as ws:
             await ws.send(our_msg)
 
             while call_count > 0:
@@ -38,57 +37,24 @@ class DataParser:
                     # Receive message
                     message = await ws.recv()
                     out = json.loads(message)
-
                     # Process the data
                     self.data = pd.DataFrame(out)
                     call_count -= 1
 
                 except Exception as e:
-                    print(f"Error receiving data: {e}")
+                    print(f"Error receiving data: {e}") #will print once at the start as a different response will be returned
                     continue
     
-    async def display_option_data(self):
-        """Displays the fetched option data in real time."""
-        token = self.token
-        if not token.endswith("@markPrice"):
-            token += "@markPrice"
-
-        # Start fetching data in the background
-        task = asyncio.create_task(self.get_live_option_data(token))
-        try:
-            try:
-                while True:  # Keep displaying the data as it arrives
-                    await asyncio.sleep(1)  # Delay for a moment before checking for updates
-                    if self.data is not None:
-                        df = self.data.copy()
-                        try:
-                            df.drop(columns=["e", "E"], inplace=True)  # Drop 'e' and 'E' columns
     
-                            df_puts = df[df['s'].str.endswith('P')].reset_index(drop=True)  # Filter puts
-                            df_calls = df[df['s'].str.endswith('C')].reset_index(drop=True)  # Filter calls
-
-                            # Display the results
-                            print("Puts:\n", df_puts.tail(self.data_rows))
-                            print("\nCalls:\n", df_calls.tail(self.data_rows))
-
-                        except:
-                            continue
-
-
-            except asyncio.CancelledError:
-                print("Data display cancelled.")
-        except KeyboardInterrupt:
-            task.cancel()
-
-
 
     def get_current_coin_price(self):
         try:
-            if len(self.token) <= 4:
+            if len(self.token) <= 4: #Did not just do an ends with check so other coins can be checked such as BTCETH price
                 token = self.token.upper() + "USDT"
             else:
                 token = self.token
-            request = requests.get(f'https://api.binance.com/api/v3/ticker/price?symbol={token}')
+            url = Endpoints.TICKERPRICE.value+token
+            request = requests.get(url)
             coinPriceData = json.loads(request.text)
             coinPrice = trunc(float(coinPriceData['price']), 3)
             print (f"\nBINANCE Price for {token} = ${coinPrice}")
