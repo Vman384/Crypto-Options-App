@@ -58,8 +58,8 @@ class UI:
         try:
             try:
                 while True:  # Keep displaying the data as it arrives
-                    await asyncio.sleep(1)  # Delay for a moment before checking for updates
-                    if self.dataParser.data is not None:
+                    await asyncio.sleep(1)  # Delay for a moment before checking for updates, check for a better way later, should be able to dynamically wait for the thread to be done line wait in c
+                    if self.dataParser.data is not None and not self.dataParser.data.empty:
                         df = self.dataParser.data
                         try:
                             df.drop(columns=["e", "E"], errors="ignore")  # Drop 'e' and 'E' columns

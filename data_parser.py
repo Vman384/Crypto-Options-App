@@ -11,7 +11,6 @@ from endpoints import Endpoints
 
 class DataParser:
     def __init__(self, client: Client):
-        self.optionSocketEndpoint = 'wss://nbstream.binance.com/eoptions/ws'
         self.token = "BTC"
         self.data_rows = 5
         self.client = client
@@ -38,16 +37,26 @@ class DataParser:
                     message = await ws.recv()
                     out = json.loads(message)
                     # Process the data
+                except Exception as e:
+                    print(f"Error receiving data: {e}") 
+                    continue
+                try:
+                    if out['result'] == None:
+                            print("No data recieved yet")
+                            continue
                     self.data = pd.DataFrame(out)
                     call_count -= 1
-
-                except Exception as e:
-                    print(f"Error receiving data: {e}") #will print once at the start as a different response will be returned
-                    continue
+                except TypeError or KeyError:
+                    try:
+                        self.data = pd.DataFrame(out)
+                        call_count -= 1
+                    except Exception as e:
+                        print(f"Error receiving data: {e}")
+            
     
     
 
-    def get_current_coin_price(self):
+    async def get_current_coin_price(self):
         try:
             if len(self.token) <= 4: #Did not just do an ends with check so other coins can be checked such as BTCETH price
                 token = self.token.upper() + "USDT"

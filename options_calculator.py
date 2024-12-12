@@ -4,6 +4,8 @@ from scipy.stats import norm
 from data_parser import DataParser
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
+from threading import Thread
+from multiprocessing import Pool, cpu_count
 
 class OptionsCalculator:
     def __init__(self, dataParser: DataParser) -> None:
@@ -29,39 +31,70 @@ class OptionsCalculator:
 
         return totalDelta
 
-    
-    def mispriced_options(self) -> float:
-        # Step 1: Fetch the initial options data synchronously
-        asyncio.run(self.dataParser.get_live_product_data(self.dataParser.token + "@markPrice", 2, 2)) #could use binance client but since I am in Australia I dont have access
-        symbolsDf = self.dataParser.get_data()['s']
-        # tokenPrice = asyncio.run(self.dataParser.get_live_product_data(self.dataParser.token + "@aggTrade"))
-        tokenPrice = self.dataParser.get_current_coin_price() #change to use a websocket 
-        print(symbolsDf)
+    async def mispriced_options(self) -> float:
+        # Step 1: Fetch initial options data asynchronously
+        await self.dataParser.get_live_product_data(self.dataParser.token + "@markPrice", 2, 2)
+        symbolsDf = self.dataParser.data['s']  # Extract symbols dataframe
+        tokenPrice = asyncio.create_task(self.dataParser.get_current_coin_price())  # Fetch token price asynchronously and refresh it in the background
+        await asyncio.sleep(1) #wait to get token data
 
-        # Step 2: Fetch additional data for each option
-        async def fetch_option_data(symbol):
-            return await self.dataParser.get_live_product_data(symbol + "@ticker")
-
-        async def fetch_all_options(symbols):
-            tasks = [fetch_option_data(symbol) for symbol in symbols]
-            return await asyncio.gather(*tasks)
-
-        optionData = asyncio.run(fetch_all_options(symbolsDf))
-
-        # Step 3: Process each option in a separate thread
-        def process_option(optionData):
+        # Step 2: Function to fetch option data in threads
+        def fetch_option_data(symbol):
             try:
-                print(optionData)
-                symbol = optionData['s'].split("-")
-                strikePrice = symbol[2]
-                callOrPut = symbol[3]
-                self.black_scholes(tokenPrice, strikePrice, optionData['t'], optionData['r'], optionData['v'], callOrPut)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                option_data = loop.run_until_complete(self.dataParser.get_live_product_data(symbol + "@ticker"))
+                return option_data
             except Exception as e:
-                print(f"Error processing option {optionData}: {e}")
+                print(f"Error fetching option data for {symbol}: {e}")
+                return None
 
-        with ThreadPoolExecutor() as executor:
-            executor.map(process_option, optionData.tail(10)) # have got the value set to 10 as otherwise I get too many requests and get timed out
+        # Step 3: Function to process option data with multiprocessing
+        def process_option(args):
+            token_price, option_data = args
+            try:
+                symbol_parts = option_data['s'].split("-")
+                strike_price = float(symbol_parts[2])
+                call_or_put = symbol_parts[3]
+                predicted_price = self.black_scholes(
+                    token_price,
+                    strike_price,
+                    option_data['t'],  # Time to expiry
+                    option_data['r'],  # Risk-free rate
+                    option_data['v'],  # Volatility
+                    call_or_put
+                )
+                return predicted_price
+            except Exception as e:
+                print(f"Error processing option {option_data}: {e}")
+                return None
 
+        # Step 4: Threading for fetching data
+        threads = []
+        option_data_list = []
+
+        def fetch_data_thread(symbol):
+            option_data = fetch_option_data(symbol)
+            if option_data:
+                option_data_list.append(option_data)
+
+        
+        while True:
+            for symbol in symbolsDf.tail(10):  # Fetch last 10 symbols
+                thread = Thread(target=fetch_data_thread, args=(symbol,))
+                threads.append(thread)
+                thread.start()
+
+            # Wait for all threads to finish
+            for thread in threads:
+                thread.join()
+            # Step 5: Multiprocessing for calculations
+            with Pool(processes=cpu_count()) as pool:
+                results = pool.map(process_option, [(tokenPrice, data) for data in option_data_list])
+
+            print("Predicted Prices:", results)
+        return results
+    
     def black_scholes(self, S, K, T, r, vega, option_type='call') -> float:
         """
         Calculate the Black-Scholes option price.
@@ -97,4 +130,6 @@ class OptionsCalculator:
         return price
 
 
-     
+
+
+        
