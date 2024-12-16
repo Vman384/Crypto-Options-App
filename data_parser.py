@@ -1,12 +1,9 @@
-import websocket
 import websockets
 import json
 import pandas as pd
 import requests
-import re
 from common import trunc
 from binance.client import Client
-import asyncio
 from endpoints import Endpoints
 
 class DataParser:
@@ -15,6 +12,7 @@ class DataParser:
         self.data_rows = 5
         self.client = client
         self.data = pd.DataFrame()
+        self.tokenPrice = None
         
     def set_token(self):
         token = input("Specify token for which you would like data: ")
@@ -24,7 +22,9 @@ class DataParser:
     def get_data(self):
         return self.data
 
-    async def get_live_product_data(self, token, id = 1, number_of_calls=float('inf'), endpoint: Endpoints = Endpoints.OPTIONWEBSOCKET.value):
+    async def get_live_product_data(self, token = None, id = 1, number_of_calls=float('inf'), endpoint: Endpoints = Endpoints.OPTIONWEBSOCKET.value):
+        if token is None:
+            token = self.token
         our_msg = json.dumps({'method': 'SUBSCRIBE', 'params': [token], 'id': id})
         call_count = number_of_calls
         endpoint += token
@@ -35,23 +35,23 @@ class DataParser:
                 try:
                     # Receive message
                     message = await ws.recv()
-                    out = json.loads(message)
+                    self.data = json.loads(message)
                     # Process the data
                 except Exception as e:
                     print(f"Error receiving data: {e}") 
                     continue
                 try:
-                    if out['result'] == None:
+                    if self.data['result'] == None:
                             print("No data recieved yet")
                             continue
-                    self.data = pd.DataFrame(out)
                     call_count -= 1
-                except TypeError or KeyError:
+                except:
                     try:
-                        self.data = pd.DataFrame(out)
+                        # print(self.data)
                         call_count -= 1
                     except Exception as e:
                         print(f"Error receiving data: {e}")
+
             
     
     
@@ -65,8 +65,8 @@ class DataParser:
             url = Endpoints.TICKERPRICE.value+token
             request = requests.get(url)
             coinPriceData = json.loads(request.text)
-            coinPrice = trunc(float(coinPriceData['price']), 3)
-            print (f"\nBINANCE Price for {token} = ${coinPrice}")
+            self.tokenPrice = trunc(float(coinPriceData['price']), 3)
+            print (f"\nBINANCE Price for {token} = ${self.tokenPrice}")
         except Exception as e:
             print(e)
             print("Could not get coin price")

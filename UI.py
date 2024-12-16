@@ -1,4 +1,5 @@
 import sys
+import pandas as pd
 from data_parser import DataParser
 import asyncio
 from inspect import iscoroutinefunction
@@ -39,7 +40,8 @@ class UI:
                         selected_function()  # Run sync function
                 else:
                     print("Invalid choice. Please try again.")
-            except ValueError:
+            except Exception as e:
+                print(e)
                 print("Invalid input. Please enter a number.")
         
     def quit(self):
@@ -59,9 +61,10 @@ class UI:
             try:
                 while True:  # Keep displaying the data as it arrives
                     await asyncio.sleep(1)  # Delay for a moment before checking for updates, check for a better way later, should be able to dynamically wait for the thread to be done line wait in c
-                    if self.dataParser.data is not None and not self.dataParser.data.empty:
-                        df = self.dataParser.data
+                    if self.dataParser.data is not None:
                         try:
+                            df = pd.DataFrame(self.dataParser.data)
+
                             df.drop(columns=["e", "E"], errors="ignore")  # Drop 'e' and 'E' columns
     
                             df_puts = df[df['s'].str.endswith('P')].reset_index(drop=True)  # Filter puts
@@ -73,9 +76,8 @@ class UI:
 
                         except:
                             continue
-
-
             except asyncio.CancelledError:
-                print("Data display cancelled.")
+                print("Data display cancelled. Returning to menu")
+                task.cancel()
         except KeyboardInterrupt:
             task.cancel()
