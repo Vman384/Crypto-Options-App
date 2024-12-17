@@ -11,7 +11,7 @@ class DataParser:
         self.token = "BTC"
         self.data_rows = 5
         self.client = client
-        self.data = pd.DataFrame()
+        self.data = None
         self.tokenPrice = None
         
     def set_token(self):
@@ -36,18 +36,18 @@ class DataParser:
                     # Receive message
                     message = await ws.recv()
                     self.data = json.loads(message)
-                    # Process the data
+                    # print(self.data)
                 except Exception as e:
                     print(f"Error receiving data: {e}") 
                     continue
                 try:
+                # Process the data
                     if self.data['result'] == None:
                             print("No data recieved yet")
                             continue
                     call_count -= 1
                 except:
                     try:
-                        # print(self.data)
                         call_count -= 1
                     except Exception as e:
                         print(f"Error receiving data: {e}")

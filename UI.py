@@ -3,6 +3,7 @@ import pandas as pd
 from data_parser import DataParser
 import asyncio
 from inspect import iscoroutinefunction
+from endpoints import Endpoints
 
 
 class UI:
@@ -56,7 +57,7 @@ class UI:
             token += "@markPrice"
 
         # Start fetching data in the background
-        task = asyncio.create_task(self.dataParser.get_live_product_data(token))
+        task = asyncio.create_task(self.dataParser.get_live_product_data(token=token, endpoint=Endpoints.OPTIONWEBSOCKET.value))
         try:
             try:
                 while True:  # Keep displaying the data as it arrives
