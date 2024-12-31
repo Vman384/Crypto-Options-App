@@ -35,96 +35,8 @@ class OptionsCalculator:
                 totalDelta[coin] = spot[coin]
 
         return totalDelta
-
-    async def mispriced_options1(self) -> float:
-        if len(self.dataParser.token) <= 4: #Did not just do an ends with check so other coins can be checked such as BTCETH price
-            token = self.dataParser.token.lower() + "usdt@aggTrade"
-        else:
-            print("Invalid token, can only price against usdt")
-            return
-        # Step 1: Fetch initial options data asynchronously
-        await self.dataParser.get_live_product_data(self.dataParser.token + "@markPrice", 2, 2, Endpoints.OPTIONWEBSOCKET.value) #should make api call later
-        symbolsDf = pd.DataFrame(self.dataParser.data)['s']  # Extract symbols dataframe
-        print(token)
-        tokenPriceTask = asyncio.create_task(self.dataParser.get_live_product_data(token=token, endpoint=Endpoints.TOKENWEBSOCKET.value))  # Fetch token price asynchronously and refresh it in the background
-        try:
-            while True:
-                await asyncio.sleep(1)
-                try:
-                    print(self.dataParser.data)
-                    tokenPrice = self.dataParser.data['p']
-                    print(tokenPrice)
-                except ValueError:
-                    continue
-
-                if tokenPrice:
-
-                    # Step 2: Function to fetch option data in threads
-                    def fetch_option_data(symbol):
-                        try:
-                            asyncio.run(self.dataParser.get_live_product_data(symbol + "@ticker"))
-                            optionData = self.dataParser.data
-                            return optionData
-                        except Exception as e:
-                            print(e)
-                            print(f"Error fetching option data for {symbol}: {e}")
-                            return None
-
-                    # Step 3: Function to process option data with multiprocessing
-                    def process_option(args):
-                        token_price, option_data = args
-                        try:
-                            symbol_parts = option_data['s'].split("-")
-                            strike_price = float(symbol_parts[2])
-                            call_or_put = symbol_parts[3]
-                            predicted_price = self.black_scholes(
-                                token_price,
-                                strike_price,
-                                option_data['t'],  # Time to expiry
-                                option_data['r'],  # Risk-free rate
-                                option_data['v'],  # Volatility
-                                call_or_put
-                            )
-                            return predicted_price
-                        except Exception as e:
-                            print(f"Error processing option {option_data}: {e}")
-                            return None
-
-                    # Step 4: Threading for fetching data
-                    threads = []
-                    option_data_list = []
-                    sem = Semaphore() #using a binary semaphore as want only 1 thread writing to the options_data_list at a time
-
-                    def fetch_data_thread(symbol):
-                        option_data = fetch_option_data(symbol)
-                        print(option_data_list)
-                        if option_data:
-                            sem.acquire()
-                            option_data_list.append(option_data)
-                            sem.release()
-
-                    
-
-                    for symbol in symbolsDf.tail(10):  # Fetch first 10 symbols
-                        optionDataTask = asyncio.create_task(self.dataParser.get_live_product_data(token=symbol+ "@ticker", endpoint=Endpoints.OPTIONWEBSOCKET.value))  # Fetch token price asynchronously and refresh it in the background
-                        await asyncio.sleep(1)
-                        print(self.dataParser.data)
-                        # thread = Thread(target=fetch_data_thread, args=(symbol,), daemon=True)
-                        # threads.append(thread)
-                        # thread.start()
-
-                    # # Wait for all threads to finish
-                    # for thread in threads:
-                    #     thread.join()
-                    # Step 5: Multiprocessing for calculations
-                    with Pool(processes=cpu_count()) as pool:
-                        results = pool.map(process_option, [(tokenPrice, data) for data in option_data_list]) #using multiprocessing instead of threading as can take advantage of multiple cores and since there is no i/o
-
-                    print("Predicted Prices:", results)
-        except KeyboardInterrupt:
-            return results
     
-    def black_scholes(self, S, K, T, r, vega, option_type='call') -> float:
+    def black_scholes(self, S: float, K: float, T: float, r: float, vega: float, option_type='call') -> float:
         """
         Calculate the Black-Scholes option price.
 
@@ -146,8 +58,8 @@ class OptionsCalculator:
         float
             Option price
         """
-        d1 = (np.log(S / K) + (r + 0.5 * vega()**2) * T) / (vega() * np.sqrt(T))
-        d2 = d1 - vega() * np.sqrt(T)
+        d1 = (np.log(S / K) + (r + 0.5 * vega**2) * T) / (vega * np.sqrt(T))
+        d2 = d1 - vega * np.sqrt(T)
         
         if option_type == 'C':
             price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
@@ -160,50 +72,34 @@ class OptionsCalculator:
     
     
 
-    async def fetch_token_price_background(self, token: str):
+    def fetch_data_background(self, symbol: str, dataParser: DataParser, endpoint: Endpoints):
         """
-        Continuously fetch the live token price and update self.dataParser.data.
+        Thread wrapper to continuously fetch live data
+        Need this because threads and async gets funky, would need asyncio.new_event_loop otherwise 
         """
-        try:
-            tokenDataParser = DataParser(self.dataParser.client)
-            asyncio.create_task(tokenDataParser.get_live_product_data(token=token, endpoint=Endpoints.TOKENWEBSOCKET.value))
-            while True:
-                await tokenDataParser.get_live_product_data(token=token, endpoint=Endpoints.TOKENWEBSOCKET.value)
-                await asyncio.sleep(0.5)  # Fetch data every 0.5 seconds
-                self.tokenPrice = tokenDataParser.data['p']
-                print(self.tokenPrice)
-        except asyncio.CancelledError:
-            print("Token price background task was cancelled.")
+        asyncio.run(dataParser.get_live_product_data(symbol, endpoint=endpoint))
+    
+    def fetch_data_background_option(self, symbol: str, dataParser: DataParser, endpoint: Endpoints):
+        """
+        Thread wrapper to continuously fetch live data
+        Need this because threads and async gets funky, would need asyncio.new_event_loop otherwise 
+        """
+        asyncio.run(dataParser.get_live_product_data_not_async(symbol, endpoint=endpoint))
 
-    async def fetch_option_data_background(self, symbol: str, queue: asyncio.Queue):
-        """
-        Continuously fetch live option data and put it into a queue.
-        """
-        optionDataParser = DataParser(self.dataParser.client)
-        try:
-            while True:
-                await optionDataParser.get_live_product_data(symbol + "@ticker", endpoint=Endpoints.OPTIONWEBSOCKET.value)
-                option_data = optionDataParser.data
-                await queue.put(option_data)  # Place fetched data into the queue
-                await asyncio.sleep(1)  # Fetch data every 1 second
-        except asyncio.CancelledError:
-            print(f"Option data task for {symbol} was cancelled.")
-
-    def process_option(self, args):
+    def process_option(self, token_price, option_data):
         """
         Process option data using Black-Scholes calculation.
         """
-        token_price, option_data = args
         try:
             symbol_parts = option_data['s'].split("-")
-            strike_price = float(symbol_parts[2])
+            strike_price = symbol_parts[2]
             call_or_put = symbol_parts[3]
             predicted_price = self.black_scholes(
-                token_price,
-                strike_price,
-                option_data['t'],  # Time to expiry
-                option_data['r'],  # Risk-free rate
-                option_data['v'],  # Volatility
+                float(token_price),
+                float(strike_price),
+                float(option_data['t']),  # Time to expiry
+                float(option_data['r']),  # Risk-free rate
+                float(option_data['v']),  # Volatility
                 call_or_put
             )
             print(f"Processed Price: {predicted_price}")
@@ -222,54 +118,52 @@ class OptionsCalculator:
         else:
             print("Invalid token, can only price against usdt")
             return
-
-        # Step 2: Start token price fetcher using executor to run in background
-        loop = asyncio.get_event_loop()
-        executor = ThreadPoolExecutor()
-        # loop.run_in_executor(executor, asyncio.create_task, self.fetch_token_price_background(token))
-        loop.create_task(self.fetch_token_price_background(token))
-        
-        await asyncio.sleep(1)  # Allow initial data to populate
-
+        # Step 2: Create thread to fetch live token price
+        tokenThread = Thread(target=self.fetch_data_background, args=(token, self.dataParser, Endpoints.TOKENWEBSOCKET.value,), daemon=True)
         # Step 3: Fetch initial options data and prepare symbols
         await self.dataParser.get_live_product_data(self.dataParser.token + "@markPrice", 2, 2, Endpoints.OPTIONWEBSOCKET.value)
-        symbolsDf = pd.DataFrame(self.dataParser.data)['s']
+        symbolsDf = pd.DataFrame(self.dataParser.get_data())['s']
         print("Symbols to fetch:", symbolsDf)
-
-        # Step 4: Create an asyncio.Queue for communication
-        option_data_queue = asyncio.Queue()
-
+        tokenThread.start()
         # Step 5: Start option data fetchers
-        option_tasks = []
+        optionTasks = []
         for symbol in symbolsDf.tail(10):  # Limit to 10 symbols
-            task = asyncio.create_task(self.fetch_option_data_background(symbol, option_data_queue))
-            option_tasks.append(task)
-
-        # Step 6: Process fetched data with ProcessPoolExecutor
-        with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+            asyncio.new_event_loop()
+            dataParser = DataParser(self.dataParser.client)
+            task = Thread(target=self.fetch_data_background, args=(symbol+"@ticker", dataParser, Endpoints.OPTIONWEBSOCKET.value,), daemon=True)
+            optionTasks.append((task, dataParser))
+            task.start()
+        while True:
             try:
-                while True:
-                    # Get the latest token price
-                    token_price = self.tokenPrice
-                    if not token_price:
-                        print("Waiting for token price data...")
-                        await asyncio.sleep(1)
-                        continue
+                print(self.dataParser.data)
+                tokenPrice = self.dataParser.get_data()['p']
+                print(tokenPrice)
+            except:
+                continue
+            
+            if tokenPrice:
+                
+                
+                for thread in optionTasks:
+                    self.process_option(tokenPrice,thread[1].get_data())
+                    # # Step 6: Process fetched data with ProcessPoolExecutor
+                    # with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+                    #     try:
+                    #         # Fetch option data from the queue
+                    #         optionData = thread[1].data
+                    #         print(optionData)
+                    #         if optionData:
+                    #             # Submit the processing task to the process pool
+                    #             executor.submit(self.process_option, (tokenPrice, optionData))
+                    #     except KeyboardInterrupt:
+                    #         print("Stopping all tasks...")
 
-                    # Fetch option data from the queue
-                    option_data = await option_data_queue.get()
-                    if option_data:
-                        # Submit the processing task to the process pool
-                        executor.submit(self.process_option, (token_price, option_data))
-
-            except KeyboardInterrupt:
-                print("Stopping all tasks...")
-
-            finally:
-                # Step 7: Cancel all background tasks
-                for task in option_tasks:
-                    task.cancel()
-                print("All tasks stopped.")
+                    #     finally:
+                    #         # Step 7: Cancel all background tasks
+                    #         # for task in option_tasks:
+                    #         #     task.cancel()
+                    #         print("All tasks stopped.")    
+        
 
 
 

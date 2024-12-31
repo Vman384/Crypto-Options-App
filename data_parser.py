@@ -5,6 +5,7 @@ import requests
 from common import trunc
 from binance.client import Client
 from endpoints import Endpoints
+import websocket
 
 class DataParser:
     def __init__(self, client: Client):
@@ -52,7 +53,36 @@ class DataParser:
                     except Exception as e:
                         print(f"Error receiving data: {e}")
 
-            
+    # def get_live_product_data_not_async(self, token = None, id = 1, number_of_calls=float('inf'), endpoint: Endpoints = Endpoints.OPTIONWEBSOCKET.value):
+    #     if token is None:
+    #         token = self.token
+    #     our_msg = json.dumps({'method': 'SUBSCRIBE', 'params': [token], 'id': id})
+    #     def on_open(ws):
+    #         ws.send(our_msg)
+    #     endpoint += token
+
+    #     def on_message(ws, message):
+    #         try:
+    #             # Receive message
+    #             # message = await ws.recv()
+    #             self.data = json.loads(message)
+    #             # print(self.data)
+    #         except Exception as e:
+    #             print(f"Error receiving data: {e}") 
+    #         try:
+    #         # Process the data
+    #             if self.data['result'] == None:
+    #                     print("No data recieved yet")
+    #         except:
+    #             try:
+    #                 print(self.data)
+    #             except Exception as e:
+    #                 print(f"Error receiving data: {e}")
+    #     # async with websockets.connect(endpoint, open_timeout=30, close_timeout=30) as ws:
+    #     #     await ws.send(our_msg)
+    #     ws = websocket.WebSocketApp(endpoint, on_message=on_message, on_open=on_open)
+
+    #     ws.run_forever()
     
     
 
