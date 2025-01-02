@@ -7,9 +7,9 @@ from options_calculator import OptionsCalculator
 
 
 print("Welcome to the all inclusive option app")
-# apiKey = input("Please enter your binance api key: ")
-# apiSecret = input("Please enter your binance api secret: ")
-client = Client(api_key="SqbANdfqkSGM2uN7zeXMZSekaCuxRbD6KWru1q7tyibhU04lFhahcR7FUhaJY0cN",api_secret="5cXBv9T5Qpy0UgeASbRXEhO2d22GpF7WhdJpx5mwYOev3lP2gMwnk3ERVKh4eryW")
+apiKey = input("Please enter your binance api key: ")
+apiSecret = input("Please enter your binance api secret: ")
+client = Client(api_key=apiKey,api_secret=apiSecret)
 # print(client.options_account_info())
 dataParser = DataParser(client)
 ui = UI(dataParser) 
