@@ -79,8 +79,11 @@ The app relies on the following Python libraries:
 - **numpy**: For numerical calculations.
 - **scipy**: For statistical functions (e.g., `norm.cdf` in Black-Scholes).
 - **python-binance**: For Binance API integration.
-- **websockets** and **websocket-client**: For real-time data streaming.
+- **websocket-client**: For real-time data streaming.
 - **asyncio**: For asynchronous programming.
+- **multiprocessing**: For CPU intensive calculations.
+- **thread**: For using multithreading when fetching data.
+
 
 All dependencies are listed in `requirements.txt`.
 

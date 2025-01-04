@@ -5,6 +5,5 @@ numpy
 python-binance
 asyncio
 websockets
-websocket-client
 thread
 multiprocessing 
