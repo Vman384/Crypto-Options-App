@@ -1,6 +1,6 @@
 # Option Hedging App
 
-The **Option Hedging App** is a Python-based application designed to help users manage and analyze options trading data in real-time. It integrates with the Binance API to fetch live market data, calculate option prices using the Black-Scholes model, and execute buy/sell orders. The app also provides tools for delta hedging and identifying mispriced options.
+The **Option Hedging App** is a Python-based application designed to help users manage and analyze options trading data in real-time. It integrates with the Binance API to fetch live market data using a websocket, calculate option prices using the Black-Scholes model, and execute buy/sell orders. The app also provides tools for delta hedging and identifying mispriced options by leverging multithreading and asynchronous operations.
 
 ---
 
