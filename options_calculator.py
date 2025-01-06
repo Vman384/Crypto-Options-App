@@ -46,7 +46,7 @@ class OptionsCalculator:
         K : float
             Strike price
         T : float
-            Time to maturity (in years)
+            Time to maturity (in days)
         r : float
             Risk-free interest rate (annualized)
         vega : float
@@ -58,6 +58,7 @@ class OptionsCalculator:
         float
             Option price
         """
+        T = abs(T) / 365 #Binance gives the time in days and negative
         d1 = (np.log(S / K) + (r + 0.5 * vega**2) * T) / (vega * np.sqrt(T))
         d2 = d1 - vega * np.sqrt(T)
         
@@ -78,13 +79,6 @@ class OptionsCalculator:
         Need this because threads and async gets funky, would need asyncio.new_event_loop otherwise 
         """
         asyncio.run(dataParser.get_live_product_data(symbol, endpoint=endpoint))
-    
-    def fetch_data_background_option(self, symbol: str, dataParser: DataParser, endpoint: Endpoints):
-        """
-        Thread wrapper to continuously fetch live data
-        Need this because threads and async gets funky, would need asyncio.new_event_loop otherwise 
-        """
-        asyncio.run(dataParser.get_live_product_data_not_async(symbol, endpoint=endpoint))
 
     def process_option(self, token_price, option_data):
         """
@@ -135,7 +129,6 @@ class OptionsCalculator:
             task.start()
         while True:
             try:
-                print(self.dataParser.data)
                 tokenPrice = self.dataParser.get_data()['p']
                 print(tokenPrice)
             except:
@@ -144,25 +137,33 @@ class OptionsCalculator:
             if tokenPrice:
                 
                 
-                for thread in optionTasks:
-                    self.process_option(tokenPrice,thread[1].get_data())
-                    # # Step 6: Process fetched data with ProcessPoolExecutor
-                    # with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
-                    #     try:
-                    #         # Fetch option data from the queue
-                    #         optionData = thread[1].data
-                    #         print(optionData)
-                    #         if optionData:
-                    #             # Submit the processing task to the process pool
-                    #             executor.submit(self.process_option, (tokenPrice, optionData))
-                    #     except KeyboardInterrupt:
-                    #         print("Stopping all tasks...")
+                
+                    # Step 6: Process fetched data with ProcessPoolExecutor
+                    with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+                        try:
+                            for thread in optionTasks:
+                                try:
+                                    optionData = thread[1].get_data()
+                                    executor.submit(self.process_option, (tokenPrice, optionData))
+                                    theoreticalPrice = self.process_option(tokenPrice, optionData)
+                                    time.sleep(1)
+                                    print(optionData['mp'])
+                                    if float(optionData['mp']) * 1.03 > theoreticalPrice:
+                                        print(f"Option {optionData['s']} is overpriced")
+                                    elif float(optionData['mp']) * 0.97 < theoreticalPrice:
+                                        print(f"Option {optionData['s']} is underpriced")
+                                    else:
+                                        print(f"Option {optionData['s']} is fairly priced")
+                                except Exception as e: 
+                                    print(e)
+                        except KeyboardInterrupt:
+                            print("Stopping all tasks...")
 
-                    #     finally:
-                    #         # Step 7: Cancel all background tasks
-                    #         # for task in option_tasks:
-                    #         #     task.cancel()
-                    #         print("All tasks stopped.")    
+                        finally:
+                            # Step 7: Cancel all background tasks
+                            for task in optionTasks:
+                                task.cancel()
+                            print("All tasks stopped.")    
         
 
 
